@@ -1,0 +1,11 @@
+route_pass_id,mission_id,nominal_row_id,start_east_m,start_north_m,end_east_m,end_north_m,route_direction,expected_panel_count
+M01-R1,M01,R1,0.0,0.0,19.8,0.0,eastbound,10
+M01-R2,M01,R2,19.8,5.0,0.0,5.0,westbound,10
+M01-R3,M01,R3,0.0,10.0,19.8,10.0,eastbound,10
+M01-R4,M01,R4,19.8,15.0,0.0,15.0,westbound,10
+M01-R5,M01,R5,0.0,20.0,19.8,20.0,eastbound,10
+M02-R1,M02,R1,0.0,0.0,19.8,0.0,eastbound,10
+M02-R2,M02,R2,19.8,5.0,0.0,5.0,westbound,10
+M02-R3,M02,R3,0.0,10.0,19.8,10.0,eastbound,10
+M02-R4,M02,R4,19.8,15.0,0.0,15.0,westbound,10
+M02-R5,M02,R5,0.0,20.0,19.8,20.0,eastbound,10

@@ -9,3 +9,8 @@ CHAT_HANDOFF_CONTEXT.md
 
 # OS junk
 .DS_Store
+
+# Sunnybotics' real sample dataset (cloned locally to run --external) and its
+# generated outputs - real, possibly-proprietary photos, not ours to redistribute
+data/external/
+outputs/external/

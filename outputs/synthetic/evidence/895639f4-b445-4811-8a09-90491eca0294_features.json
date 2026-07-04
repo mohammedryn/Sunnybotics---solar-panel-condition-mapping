@@ -1,0 +1,12 @@
+{
+  "brightness_median": 0.11372549019607843,
+  "shadow_area_ratio": 0.0816550925925926,
+  "shadow_directionality_score": 0.6243174870956062,
+  "dirt_area_ratio": 0.004797453703703704,
+  "dirt_hue_shift_score": 0.16511191262139213,
+  "glare_area_ratio": 0.0,
+  "glare_clipped_pixel_ratio": 0.0,
+  "damage_line_density": 0.0,
+  "damage_irregular_line_score": 0.5714285714285714,
+  "laplacian_variance": 159.4019030695074
+}

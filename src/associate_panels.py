@@ -302,10 +302,13 @@ def _decide(per_capture_result: dict, route_row: pd.Series, candidates: pd.DataF
 def associate(
     ingested_captures_path: str = None,
     route_plan_path: str = None,
-    farm_truth_path: str = config.FARM_TRUTH_PATH,
+    farm_truth_path: str = None,
 ) -> pd.DataFrame:
     ingested_captures_path = ingested_captures_path or os.path.join(config.DATA_DIR, "ingested_captures.csv")
     route_plan_path = route_plan_path or os.path.join(config.DATA_DIR, "route_plan.csv")
+    # Looked up at call time, not bound in the signature - see ingest.py's
+    # equivalent comment for why (config.set_mode() runs after import).
+    farm_truth_path = farm_truth_path or config.FARM_TRUTH_PATH
 
     captures_df = pd.read_csv(ingested_captures_path)
     route_lookup = _load_route_plan(route_plan_path)
@@ -317,7 +320,14 @@ def associate(
     processable = captures_df[captures_df["route_context_status"] == "ok"]
     unprocessable = captures_df[captures_df["route_context_status"] != "ok"]
 
-    for route_pass_id, group in processable.groupby("route_pass_id"):
+    # Datasets with no route structure at all (external mode) have no
+    # route_pass_id column, not just no "ok" rows - groupby() needs the
+    # column to exist regardless of row count. processable is guaranteed
+    # empty in that case anyway (route_context_status can never be "ok"
+    # without route structure), so this is a safe, correct short-circuit,
+    # not a behavior change for datasets that do have the column.
+    has_route_pass_id = "route_pass_id" in processable.columns
+    for route_pass_id, group in (processable.groupby("route_pass_id") if has_route_pass_id else []):
         route_row = route_lookup.loc[route_pass_id]
         nominal_row_id = group["nominal_row_id"].iloc[0]
         candidates = _candidates_for_row(farm_df, nominal_row_id, route_row)

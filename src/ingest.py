@@ -102,9 +102,19 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from . import config, farm_layout, image_synth
+from . import config, farm_layout
 
-REQUIRED_FIELDS = ["image_id", "timestamp", "robot_id", "mission_id", "route_pass_id", "nominal_row_id"]
+# Core identity fields every dataset must have, regardless of mode.
+CORE_REQUIRED_FIELDS = ["image_id", "timestamp", "robot_id", "mission_id"]
+# Route identity is only required of datasets that HAVE route structure at
+# all (the synthetic mission simulator). The external Sunnybotics sample
+# dataset has no GPS/route/panel metadata by its own description - it
+# simply doesn't have these columns, which is not the same failure mode
+# as a synthetic row missing them (an actual data-quality problem). Which
+# fields are "required" is therefore computed per dataset from the
+# columns actually present, not assumed fixed - see ingest()'s
+# `required_fields` local.
+ROUTE_REQUIRED_FIELDS = ["route_pass_id", "nominal_row_id"]
 
 # How far (meters) a GPS fix can be from the farm's bounding envelope
 # before it's flagged as implausible for this deployment, even if it's
@@ -125,8 +135,8 @@ def _is_missing(value) -> bool:
     return False
 
 
-def _check_metadata(row: pd.Series) -> str:
-    for field in REQUIRED_FIELDS:
+def _check_metadata(row: pd.Series, required_fields: list) -> str:
+    for field in required_fields:
         if _is_missing(row.get(field)):
             return f"incomplete_metadata:{field}"
     return "ok"
@@ -150,11 +160,18 @@ def _check_coordinates(row: pd.Series) -> str:
 
 
 def _check_image_content(pixels: np.ndarray) -> str:
+    # No longer requires an EXACT match to the synthetic renderer's fixed
+    # 480x360 canvas - only ever mattered for synthetic data (which is
+    # always exactly that size by construction, so this never actually
+    # fired in practice there either), and would have flagged every
+    # single real external photo as "unexpected_dimensions" purely for
+    # having a normal, varying real-world resolution. MIN_IMAGE_DIMENSION_PX
+    # and the blank/near-constant check below are the checks that
+    # actually catch degenerate content; exact-size matching wasn't a
+    # meaningful content-sanity signal to begin with.
     h, w = pixels.shape[:2]
     if h < config.MIN_IMAGE_DIMENSION_PX or w < config.MIN_IMAGE_DIMENSION_PX:
         return "too_small"
-    if (h, w) != (image_synth.IMG_H, image_synth.IMG_W):
-        return "unexpected_dimensions"
     if pixels.astype(np.float32).std() < config.BLANK_STD_THRESHOLD:
         return "blank_or_near_constant"
     return "ok"
@@ -225,20 +242,36 @@ def _check_odometry_bounds(row: pd.Series, route_lookup: dict) -> str:
 
 
 def ingest(
-    captures_path: str = config.CAPTURES_RAW_PATH,
+    captures_path: str = None,
     route_plan_path: str = None,
-    farm_truth_path: str = config.FARM_TRUTH_PATH,
+    farm_truth_path: str = None,
 ) -> pd.DataFrame:
+    # All three looked up at call time (config.set_mode() runs before this
+    # is called, but a signature default like `=config.X` is bound once at
+    # import time and would silently ignore a later mode switch).
+    captures_path = captures_path or config.CAPTURES_RAW_PATH
+    farm_truth_path = farm_truth_path or config.FARM_TRUTH_PATH
     route_plan_path = route_plan_path or os.path.join(config.DATA_DIR, "route_plan.csv")
     captures_df = pd.read_csv(captures_path)
-    route_lookup = _load_route_plan(route_plan_path)
-    known_row_ids = set(pd.read_csv(farm_truth_path)["panel_row"].unique())
+
+    # A dataset either has route structure (route_pass_id, nominal_row_id
+    # columns present - the synthetic simulator always provides these) or
+    # it doesn't (the external dataset, which has no GPS/route/panel
+    # metadata at all by its own description). This is a schema property
+    # of the dataset, not a per-row data-quality problem, so it's checked
+    # once here rather than per row.
+    has_route_structure = "route_pass_id" in captures_df.columns and "nominal_row_id" in captures_df.columns
+    required_fields = CORE_REQUIRED_FIELDS + (ROUTE_REQUIRED_FIELDS if has_route_structure else [])
+
+    if has_route_structure:
+        route_lookup = _load_route_plan(route_plan_path)
+        known_row_ids = set(pd.read_csv(farm_truth_path)["panel_row"].unique())
 
     metadata_status, coord_status, image_status, content_status = [], [], [], []
     route_context_status, odometry_status = [], []
     for _, row in captures_df.iterrows():
         try:
-            metadata_status.append(_check_metadata(row))
+            metadata_status.append(_check_metadata(row, required_fields))
         except Exception as e:
             metadata_status.append(f"error:{e}")
         try:
@@ -251,6 +284,14 @@ def ingest(
             load_status, content = f"error:{e}", "n/a"
         image_status.append(load_status)
         content_status.append(content)
+
+        if not has_route_structure:
+            # Not a failed check - there is nothing to check. Distinct from
+            # "ok" (checked and valid) and from the specific failure enum
+            # values (checked and found wrong) on purpose.
+            route_context_status.append("not_applicable")
+            odometry_status.append("not_applicable")
+            continue
         try:
             route_context_status.append(_check_route_context(row, route_lookup, known_row_ids))
         except Exception as e:

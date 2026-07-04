@@ -63,7 +63,11 @@ def generate_farm(
     return pd.DataFrame(records)
 
 
-def save_farm_truth(df: pd.DataFrame, path: str = config.FARM_TRUTH_PATH):
+def save_farm_truth(df: pd.DataFrame, path: str = None):
+    # Looked up at call time, not bound in the signature: config.FARM_TRUTH_PATH
+    # changes with config.set_mode(), and a signature default is evaluated once
+    # at import time, before any mode switch could possibly happen.
+    path = path or config.FARM_TRUTH_PATH
     df.to_csv(path, index=False)
 
 

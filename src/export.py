@@ -67,8 +67,13 @@ def build_joined_dataframe(
     # auditing RF-01 specifically; this recovery only affects the final
     # delivered export, which should be maximally useful rather than
     # silently propagating a gap we have the means to close.
-    missing_mission = df["mission_id"].isna() & df["route_pass_id"].notna()
-    df.loc[missing_mission, "mission_id"] = df.loc[missing_mission, "route_pass_id"].str.split("-").str[0]
+    # route_pass_id only exists for datasets with real route structure
+    # (synthetic mode) - the external dataset has no such column at all,
+    # which is a different situation than "this specific row is missing
+    # it" and shouldn't be treated as the same recovery case.
+    if "route_pass_id" in df.columns:
+        missing_mission = df["mission_id"].isna() & df["route_pass_id"].notna()
+        df.loc[missing_mission, "mission_id"] = df.loc[missing_mission, "route_pass_id"].str.split("-").str[0]
     return df
 
 

@@ -4,3 +4,5 @@ opencv-python
 Pillow
 scipy
 plotly
+scikit-learn  # optional: external mode's supervised classifier falls back to a
+              # numpy nearest-centroid classifier if this isn't installed

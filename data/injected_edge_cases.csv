@@ -1,6 +1,0 @@
-image_id,edge_case
-6d372989-2eb0-4aba-94f2-a550205a02ca,missing_image_file
-45d4f455-c9d0-4b3d-826e-c1580a1d5584,truncated_corrupted_file
-807f8439-d447-426b-86d0-3cec8a5fe540,gps_dropout_nan_coords
-03ee3631-2ded-4d3a-ad3a-8747bbcb82e7,invalid_out_of_range_coords
-e0afad24-815b-4e14-b3e4-f8ffe3594f12,incomplete_metadata_missing_mission_id

@@ -4,6 +4,7 @@ Change values here rather than hunting through modules - keeps the
 "documented assumptions" requirement (Section 4 of the brief) auditable
 from one file.
 """
+from . import image_synth
 
 # --- Reproducibility -------------------------------------------------------
 SEED = 42
@@ -268,12 +269,62 @@ CLEAN_PRIORITY_SCORE = 5.0
 # operations problem (no data), not a panel-condition problem.
 UNUSABLE_RECAPTURE_PRIORITY_SCORE = 70.0
 
-# --- Paths ------------------------------------------------------------
-DATA_DIR = "data"
-RAW_IMAGES_DIR = "data/raw_images"
-FARM_TRUTH_PATH = "data/farm_truth.csv"
-CAPTURES_RAW_PATH = "data/captures_raw.csv"
-SIM_GROUND_TRUTH_PATH = "data/sim_ground_truth_internal.csv"
-ANNOTATED_DIR = "outputs/annotated"
-OUTPUTS_DIR = "outputs"
-VISUALIZATIONS_DIR = "outputs/visualizations"
+# --- Paths, mode-scoped (src/config.py, pipeline modes) --------------------
+# Two pipeline modes share every downstream module (ingest, associate,
+# condition analysis, priority, annotate, export, visualize):
+#   synthetic - the full simulated dataset (GPS, route, odometry, panel
+#               association, all 5 condition categories, injected edge
+#               cases). This is the main, full-system pipeline.
+#   external  - Sunnybotics' real sample dataset (clean/ and damaged/
+#               image folders only, no GPS/route/panel metadata). A
+#               supplemental sanity check for the visual-analysis stage
+#               specifically, not a replacement for the synthetic
+#               end-to-end validation - see src/external_dataset.py.
+#
+# All path constants below are DERIVED from MODE and are mutated by
+# set_mode() - every module that uses one of these as a function
+# parameter default MUST look it up at call time (`path = path or
+# config.X`), never bind it directly in the signature
+# (`def f(path=config.X)`), since signature defaults are evaluated once
+# at import time, before set_mode() can possibly run. This was audited
+# and fixed across every module when mode support was added - if you add
+# a new function that reads one of these paths, follow the same pattern.
+MODE = "synthetic"
+
+
+def set_mode(mode: str):
+    global MODE, DATA_DIR, RAW_IMAGES_DIR, FARM_TRUTH_PATH, CAPTURES_RAW_PATH
+    global SIM_GROUND_TRUTH_PATH, OUTPUTS_DIR, ANNOTATED_DIR, VISUALIZATIONS_DIR, EVIDENCE_DIR
+    if mode not in ("synthetic", "external"):
+        raise ValueError(f"unknown mode {mode!r}, expected 'synthetic' or 'external'")
+    MODE = mode
+    DATA_DIR = f"data/{mode}"
+    RAW_IMAGES_DIR = f"{DATA_DIR}/raw_images"
+    FARM_TRUTH_PATH = f"{DATA_DIR}/farm_truth.csv"
+    CAPTURES_RAW_PATH = f"{DATA_DIR}/captures_raw.csv"
+    SIM_GROUND_TRUTH_PATH = f"{DATA_DIR}/sim_ground_truth_internal.csv"
+    OUTPUTS_DIR = f"outputs/{mode}"
+    ANNOTATED_DIR = f"{OUTPUTS_DIR}/annotated"
+    VISUALIZATIONS_DIR = f"{OUTPUTS_DIR}/visualizations"
+    EVIDENCE_DIR = f"{OUTPUTS_DIR}/evidence"
+
+
+set_mode("synthetic")  # establish default paths at import time
+
+# --- External dataset (src/external_dataset.py) -----------------------
+# Sunnybotics' real sample dataset, provided mid-assignment: two image
+# folders (clean/, damaged/), no GPS/route/panel metadata. Expected local
+# location - not committed to this repo (fetch it yourself, see README).
+EXTERNAL_DATASET_DIR = "data/external/sunnybotics-solar-panel-challenge"
+EXTERNAL_DATASET_CLONE_URL = "https://github.com/roboticsSunnyApp/sunnybotics-solar-panel-challenge"
+EXTERNAL_PROCESSED_IMAGES_DIR = "data/external/processed_images"
+EXTERNAL_GROUND_TRUTH_PATH = "data/external/external_ground_truth_internal.csv"
+# External photos arrive at arbitrary real-world resolutions. Every
+# classical-CV threshold in this project (edge counts, blob areas, line
+# lengths in ISSUE_DETECTION_THRESHOLDS etc.) was calibrated in absolute
+# pixel units against the synthetic renderer's fixed canvas - resizing
+# external images to match is what makes those thresholds meaningful for
+# them at all, not a cosmetic step. Disclosed as a real limitation in the
+# README, not hidden: a production system would need per-resolution (or
+# resolution-invariant) recalibration instead.
+EXTERNAL_IMAGE_RESIZE_TO = (image_synth.IMG_W, image_synth.IMG_H)

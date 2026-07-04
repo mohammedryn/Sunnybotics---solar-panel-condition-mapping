@@ -64,7 +64,14 @@ def _issue_confidence(raw_score: float, threshold: float) -> float:
 
 def _decide_condition(features: dict) -> dict:
     """Pure function: features dict -> (condition, condition_confidence,
-    detected_issues). No image access, no side effects."""
+    detected_issues). No image access, no side effects. Always uses
+    config.ISSUE_DETECTION_THRESHOLDS - this is the zero-shot,
+    synthetic-calibrated rule classifier, unconditionally, for both
+    modes. (An earlier version of this build tried recalibrating these
+    thresholds per-batch for external mode; that made real-photo
+    predictions non-degenerate but WORSE than naive baselines - see
+    src/external_classifier.py for the supervised replacement, which is
+    the real external-mode metric now.)"""
     confidences = {
         issue: _issue_confidence(features[feat_name], config.ISSUE_DETECTION_THRESHOLDS[issue])
         for issue, feat_name in ISSUE_FEATURE_MAP.items()
@@ -221,9 +228,13 @@ def save_results(df: pd.DataFrame, path: str = None):
     df.to_csv(path, index=False)
 
 
-def self_evaluate(condition_df: pd.DataFrame, ground_truth_path: str = config.SIM_GROUND_TRUTH_PATH) -> dict:
+def self_evaluate(condition_df: pd.DataFrame, ground_truth_path: str = None) -> dict:
     """Simulation-only validation against ground truth - same discipline
-    as associate_panels.py's self_evaluate. Not a real-world accuracy claim."""
+    as associate_panels.py's self_evaluate. Not a real-world accuracy claim.
+    Synthetic mode only; external mode's evaluation lives in
+    external_dataset.py since its ground truth (clean/damaged folder
+    labels) has a different shape than simulated per-panel truth."""
+    ground_truth_path = ground_truth_path or config.SIM_GROUND_TRUTH_PATH
     gt = pd.read_csv(ground_truth_path)
     merged = condition_df.merge(gt, on="image_id")
 

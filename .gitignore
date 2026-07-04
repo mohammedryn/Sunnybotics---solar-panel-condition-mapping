@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+
+# Personal working notes, not part of the submission
+CHAT_HANDOFF_CONTEXT.md
+
+# Windows Zone.Identifier metadata artifact
+*:Zone.Identifier
+
+# OS junk
+.DS_Store

@@ -1,0 +1,15 @@
+{
+  "n_total": 119,
+  "n_evaluable": 119,
+  "n_clean_true": 31,
+  "n_damaged_true": 88,
+  "n_predicted_other_category": 119,
+  "clean_vs_damaged_accuracy_on_binary_predictions": null,
+  "confusion_matrix": {
+    "other": {
+      "clean": 31,
+      "damaged": 88
+    }
+  },
+  "note": "External sample dataset validation only, not a production accuracy claim. 'other' means the classifier predicted dirt/shadow/glare/uncertain - a real, informative result, just not a clean/damaged call the folder labels can score."
+}

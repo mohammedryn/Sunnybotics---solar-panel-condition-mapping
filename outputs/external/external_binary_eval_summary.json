@@ -1,0 +1,94 @@
+{
+  "n_total": 119,
+  "n_clean_true": 31,
+  "n_damaged_true": 88,
+  "accuracy": 0.865546218487395,
+  "accuracy_95ci_wilson": [
+    0.7927150943383466,
+    0.9155148537200674
+  ],
+  "confusion_matrix": {
+    "clean": {
+      "clean": 24,
+      "damaged": 7
+    },
+    "damaged": {
+      "clean": 9,
+      "damaged": 79
+    }
+  },
+  "precision_recall_f1": {
+    "clean": {
+      "precision": 0.7272727272727273,
+      "recall": 0.7741935483870968,
+      "f1": 0.7500000000000001
+    },
+    "damaged": {
+      "precision": 0.9186046511627907,
+      "recall": 0.8977272727272727,
+      "f1": 0.9080459770114941
+    }
+  },
+  "naive_baselines": {
+    "always_predict_clean_accuracy": 0.2605042016806723,
+    "always_predict_damaged_accuracy": 0.7394957983193278,
+    "majority_class_baseline_accuracy": 0.7394957983193278
+  },
+  "classifier_backend": "logistic_regression",
+  "cv_folds": 5,
+  "top_features": [
+    {
+      "feature": "dirt_area_ratio",
+      "coefficient": 1.3063882457049687,
+      "direction": "toward_damaged"
+    },
+    {
+      "feature": "shadow_area_ratio",
+      "coefficient": 1.2773448826427676,
+      "direction": "toward_damaged"
+    },
+    {
+      "feature": "glare_clipped_pixel_ratio",
+      "coefficient": 1.1523826544703006,
+      "direction": "toward_damaged"
+    },
+    {
+      "feature": "glare_area_ratio",
+      "coefficient": -1.1433735223485957,
+      "direction": "toward_clean"
+    },
+    {
+      "feature": "shadow_directionality_score",
+      "coefficient": 0.6025337114203,
+      "direction": "toward_damaged"
+    }
+  ],
+  "confidence_strata": [
+    {
+      "stratum": "top20",
+      "n": 24,
+      "mean_confidence": 0.9821002507244717,
+      "accuracy": 0.9583333333333334,
+      "n_correct": 23,
+      "n_incorrect": 1
+    },
+    {
+      "stratum": "middle60",
+      "n": 71,
+      "mean_confidence": 0.8759117573222761,
+      "accuracy": 0.8732394366197183,
+      "n_correct": 62,
+      "n_incorrect": 9
+    },
+    {
+      "stratum": "bottom20",
+      "n": 24,
+      "mean_confidence": 0.6063104533026797,
+      "accuracy": 0.75,
+      "n_correct": 18,
+      "n_incorrect": 6
+    }
+  ],
+  "note": "Accuracy/precision/recall/F1 above are from stratified k-fold cross-validation on Sunnybotics' real external sample only - every prediction was made by a model that did not see that image's label during its own fold's training. This is a small-sample benchmark (n reflects the real dataset size), not a production accuracy claim. accuracy_95ci_wilson is a Wilson score 95% confidence interval treating each held-out prediction as an independent trial - a rough but standard way to show that a point estimate from ~100 images carries real sampling uncertainty, not a precise measurement.",
+  "feature_importance_note": "Coefficients are computed on STANDARDIZED features (mean 0, std 1), so magnitudes are comparable across features. A positive coefficient pushes the prediction toward 'damaged'; negative pushes toward 'clean'. This is diagnostic - it shows what this particular model leaned on - not a causal claim about what real damage physically looks like."
+}

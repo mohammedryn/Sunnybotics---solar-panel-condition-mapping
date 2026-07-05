@@ -2,7 +2,7 @@ __pycache__/
 *.pyc
 
 # Personal working notes, not part of the submission
-CHAT_HANDOFF_CONTEXT.md
+docs/
 
 # Windows Zone.Identifier metadata artifact
 *:Zone.Identifier

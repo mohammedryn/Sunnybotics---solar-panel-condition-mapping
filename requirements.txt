@@ -2,6 +2,7 @@ numpy
 pandas
 opencv-python
 Pillow
+pillow-heif   # decodes .heic/.heif (default iPhone photo format) - opencv can't
 scipy
 plotly
 scikit-learn  # optional: external mode's supervised classifier falls back to a

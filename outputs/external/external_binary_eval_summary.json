@@ -1,15 +1,15 @@
 {
-  "n_total": 119,
-  "n_clean_true": 31,
+  "n_total": 129,
+  "n_clean_true": 41,
   "n_damaged_true": 88,
-  "accuracy": 0.865546218487395,
+  "accuracy": 0.875968992248062,
   "accuracy_95ci_wilson": [
-    0.7927150943383466,
-    0.9155148537200674
+    0.8080002352347273,
+    0.9221934923945967
   ],
   "confusion_matrix": {
     "clean": {
-      "clean": 24,
+      "clean": 34,
       "damaged": 7
     },
     "damaged": {
@@ -19,9 +19,9 @@
   },
   "precision_recall_f1": {
     "clean": {
-      "precision": 0.7272727272727273,
-      "recall": 0.7741935483870968,
-      "f1": 0.7500000000000001
+      "precision": 0.7906976744186046,
+      "recall": 0.8292682926829268,
+      "f1": 0.8095238095238095
     },
     "damaged": {
       "precision": 0.9186046511627907,
@@ -30,62 +30,62 @@
     }
   },
   "naive_baselines": {
-    "always_predict_clean_accuracy": 0.2605042016806723,
-    "always_predict_damaged_accuracy": 0.7394957983193278,
-    "majority_class_baseline_accuracy": 0.7394957983193278
+    "always_predict_clean_accuracy": 0.3178294573643411,
+    "always_predict_damaged_accuracy": 0.6821705426356589,
+    "majority_class_baseline_accuracy": 0.6821705426356589
   },
   "classifier_backend": "logistic_regression",
   "cv_folds": 5,
   "top_features": [
     {
-      "feature": "dirt_area_ratio",
-      "coefficient": 1.3063882457049687,
-      "direction": "toward_damaged"
-    },
-    {
-      "feature": "shadow_area_ratio",
-      "coefficient": 1.2773448826427676,
-      "direction": "toward_damaged"
-    },
-    {
       "feature": "glare_clipped_pixel_ratio",
-      "coefficient": 1.1523826544703006,
+      "coefficient": 1.5366039534627793,
       "direction": "toward_damaged"
     },
     {
       "feature": "glare_area_ratio",
-      "coefficient": -1.1433735223485957,
+      "coefficient": -1.2766853071510376,
       "direction": "toward_clean"
     },
     {
-      "feature": "shadow_directionality_score",
-      "coefficient": 0.6025337114203,
+      "feature": "shadow_area_ratio",
+      "coefficient": 1.2588179155755261,
       "direction": "toward_damaged"
+    },
+    {
+      "feature": "dirt_hue_shift_score",
+      "coefficient": 0.8839993402966086,
+      "direction": "toward_damaged"
+    },
+    {
+      "feature": "damage_line_density",
+      "coefficient": -0.7596792397140367,
+      "direction": "toward_clean"
     }
   ],
   "confidence_strata": [
     {
       "stratum": "top20",
-      "n": 24,
-      "mean_confidence": 0.9821002507244717,
-      "accuracy": 0.9583333333333334,
-      "n_correct": 23,
+      "n": 26,
+      "mean_confidence": 0.9856673321428585,
+      "accuracy": 0.9615384615384616,
+      "n_correct": 25,
       "n_incorrect": 1
     },
     {
       "stratum": "middle60",
-      "n": 71,
-      "mean_confidence": 0.8759117573222761,
-      "accuracy": 0.8732394366197183,
-      "n_correct": 62,
+      "n": 77,
+      "mean_confidence": 0.8486850078251746,
+      "accuracy": 0.8831168831168831,
+      "n_correct": 68,
       "n_incorrect": 9
     },
     {
       "stratum": "bottom20",
-      "n": 24,
-      "mean_confidence": 0.6063104533026797,
-      "accuracy": 0.75,
-      "n_correct": 18,
+      "n": 26,
+      "mean_confidence": 0.5900120753374651,
+      "accuracy": 0.7692307692307693,
+      "n_correct": 20,
       "n_incorrect": 6
     }
   ],

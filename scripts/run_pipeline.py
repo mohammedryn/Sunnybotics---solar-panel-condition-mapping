@@ -122,7 +122,8 @@ def _run_shared_stages(mode: str):
         for k, v in associate_panels.self_evaluate(associated).items():
             print(f"  {k}: {v}")
     else:
-        print("  spatial association: not applicable (no GPS/route data in this dataset)")
+        print("  spatial association: not applicable (per-photo GPS exists for most images, "
+              "but no route/pass structure or panel-level ground truth to associate against)")
 
     print("\n" + "=" * 60)
     print("Analyzing condition (RF-03)")

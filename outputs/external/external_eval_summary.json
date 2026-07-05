@@ -1,13 +1,13 @@
 {
-  "n_total": 119,
-  "n_evaluable": 119,
-  "n_clean_true": 31,
+  "n_total": 129,
+  "n_evaluable": 129,
+  "n_clean_true": 41,
   "n_damaged_true": 88,
-  "n_predicted_other_category": 119,
+  "n_predicted_other_category": 129,
   "clean_vs_damaged_accuracy_on_binary_predictions": null,
   "confusion_matrix": {
     "other": {
-      "clean": 31,
+      "clean": 41,
       "damaged": 88
     }
   },

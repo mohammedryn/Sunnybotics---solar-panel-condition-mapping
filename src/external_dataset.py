@@ -1,15 +1,15 @@
 """
 External dataset mode: adapts Sunnybotics' real sample dataset (clean/
-and damaged/ image folders, no GPS/route/panel metadata at all) into the
-same captures_raw schema every downstream stage already consumes, so
-ingestion, condition analysis, priority scoring, annotation, export, and
-visualization run UNMODIFIED on real photos - only this module and the
-mode-scoping in config.py/run_pipeline.py are new.
+and damaged/ image folders) into the same captures_raw schema every
+downstream stage already consumes, so ingestion, condition analysis,
+priority scoring, annotation, export, and visualization run UNMODIFIED
+on real photos - only this module and the mode-scoping in
+config.py/run_pipeline.py are new.
 
 This is a supplemental sanity check for the visual-analysis stage
 (RF-03), specifically clean vs. damaged - NOT a replacement for the
 synthetic mission pipeline, which remains the full end-to-end validation
-of GPS/route/odometry/panel-association/all-five-condition-categories/
+of route/odometry/panel-association/all-five-condition-categories/
 edge-case handling that this dataset has no equivalent for.
 
 Ground truth handling mirrors sim_ground_truth_internal.csv's existing
@@ -20,13 +20,22 @@ only joined back in by external_eval_summary() at the very end, after
 every inference decision has already been made from the image alone.
 
 Known, disclosed limitations (see README):
-  - No real GPS/route/panel metadata exists for this dataset. latitude/
-    longitude are left NaN (honestly absent, not guessed at) - RF-06
-    spatial association naturally resolves to "unresolvable" for every
-    row via ingest.py's existing schema-tolerant route-context handling,
-    not a new code path. panel_row/panel_id are therefore also always
-    null in the export - the E2 columns exist, as required, but empty
-    is the honest answer here, not a fabricated identity.
+  - Most of these real photos DO carry per-photo GPS EXIF (phone GPS at
+    capture time) - extracted honestly here and written to latitude/
+    longitude when present, left NaN when a given photo genuinely has
+    none (never guessed at). What this dataset still does NOT have is
+    route/pass structure or panel-level ground truth - no known farm
+    layout to match a coordinate against - so RF-06 spatial association
+    still resolves to "unresolvable" for every row, via ingest.py's
+    existing schema-tolerant route-context gate (no route_pass_id/
+    nominal_row_id columns here at all), not a new code path. Real GPS
+    coordinates will also correctly read coord_validity_status =
+    "implausible_for_farm": they describe real-world locations, which
+    are naturally far outside this project's synthetic farm's arbitrary
+    local coordinate frame. That's expected, not a bug. panel_row/
+    panel_id are therefore still always null in the export - the E2
+    columns exist, as required, but empty is the honest answer here,
+    not a fabricated identity.
   - Images are resized to this project's synthetic calibration
     resolution before feature extraction, since every classical-CV
     threshold in this project was calibrated in absolute pixel units
@@ -44,15 +53,17 @@ from datetime import datetime, timedelta
 import cv2
 import numpy as np
 import pandas as pd
+import pillow_heif
+from PIL import ExifTags
+from PIL import Image as PILImage
 
 from . import config
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp")
-# Recognized-but-unreadable formats (cv2.imread can't decode HEIC/HEIF without
-# an extra codec this project doesn't depend on) - tracked separately so a
-# folder full of HEIC photos is a loud, counted skip, not a silent gap that
-# just looks like a smaller dataset.
-_UNSUPPORTED_IMAGE_EXTENSIONS = (".heic", ".heif")
+# cv2.imread can't decode these without an extra codec this project doesn't
+# otherwise depend on, so they get their own decode path via pillow-heif
+# (see _read_image_any_format) instead of being silently skipped.
+HEIC_EXTENSIONS = (".heic", ".heif")
 LABEL_FOLDERS = ("clean", "damaged")
 
 # Fixed, arbitrary namespace UUID - uuid.uuid5(namespace, name) is a
@@ -108,28 +119,75 @@ def discover_images(root_dir: str = None) -> list:
         )
 
     records = []
-    n_skipped_unsupported = 0
     for label, folder in label_dirs.items():
         for dirpath, _, filenames in os.walk(folder):
             for fname in filenames:
                 lower = fname.lower()
-                if lower.endswith(IMAGE_EXTENSIONS):
+                if lower.endswith(IMAGE_EXTENSIONS) or lower.endswith(HEIC_EXTENSIONS):
                     records.append((os.path.join(dirpath, fname), label))
-                elif lower.endswith(_UNSUPPORTED_IMAGE_EXTENSIONS):
-                    n_skipped_unsupported += 1
     records.sort(key=lambda r: r[0])
 
     if not records:
         raise ExternalDatasetNotFoundError(
             f"'{root_dir}' exists but no image files were found under clean/ or damaged/."
         )
-    if n_skipped_unsupported:
-        print(
-            f"Note: skipped {n_skipped_unsupported} file(s) in an unsupported format "
-            f"({', '.join(_UNSUPPORTED_IMAGE_EXTENSIONS)}) - not decodable by this "
-            f"project's OpenCV install. Convert to .jpg/.png to include them."
-        )
     return records
+
+
+def _read_image_any_format(path: str):
+    """cv2.imread for anything it natively handles; pillow-heif -> RGB ->
+    BGR for .heic/.heif, so both paths hand back the same BGR ndarray
+    shape everything downstream (resize, feature extraction) expects.
+    Returns None on any decode failure, exactly like cv2.imread does -
+    the caller's existing "processed_path unwritten -> ingest.py reports
+    missing_file" path handles both identically, no new failure mode."""
+    if path.lower().endswith(HEIC_EXTENSIONS):
+        try:
+            heif_file = pillow_heif.open_heif(path, convert_hdr_to_8bit=True)
+            rgb = np.array(PILImage.frombytes(heif_file.mode, heif_file.size, heif_file.data, "raw"))
+            return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        except Exception:
+            return None
+    return cv2.imread(path)
+
+
+def _dms_to_decimal(dms, ref):
+    if dms is None or ref is None:
+        return np.nan
+    try:
+        d, m, s = dms
+        val = float(d) + float(m) / 60 + float(s) / 3600
+    except (TypeError, ValueError, ZeroDivisionError):
+        return np.nan
+    return -val if ref in ("S", "W") else val
+
+
+def _extract_gps(path: str):
+    """Real per-photo GPS EXIF, honestly extracted - (nan, nan) when a
+    photo genuinely has no GPS block (about 21% of the jpg/jpeg set) or
+    when it's present but degenerate (direction ref with no lat/lon
+    magnitude, seen in a handful of real files here), never guessed at.
+    Two decode paths since HEIC's EXIF isn't exposed through the same
+    PIL API as jpg/png - pillow-heif hands back a raw EXIF blob (a
+    standard 'Exif\\x00\\x00' header followed by TIFF data) instead."""
+    try:
+        if path.lower().endswith(HEIC_EXTENSIONS):
+            heif_file = pillow_heif.open_heif(path)
+            exif_bytes = heif_file.info.get("exif")
+            if not exif_bytes:
+                return np.nan, np.nan
+            exif = PILImage.Exif()
+            exif.load(exif_bytes[6:])  # strip the 'Exif\x00\x00' segment header
+        else:
+            exif = PILImage.open(path).getexif()
+        gps = exif.get_ifd(ExifTags.IFD.GPSInfo)
+        if not gps:
+            return np.nan, np.nan
+        lat = _dms_to_decimal(gps.get(2), gps.get(1))
+        lon = _dms_to_decimal(gps.get(4), gps.get(3))
+        return lat, lon
+    except Exception:
+        return np.nan, np.nan
 
 
 def _write_stub_route_and_farm():
@@ -180,7 +238,7 @@ def build_external_captures(
         image_id = str(uuid.uuid5(_ID_NAMESPACE, rel_path))
         processed_path = os.path.join(config.EXTERNAL_PROCESSED_IMAGES_DIR, f"{image_id}.jpg")
 
-        img = cv2.imread(src_path)
+        img = _read_image_any_format(src_path)
         if img is not None:
             resized = cv2.resize(img, resize_to, interpolation=cv2.INTER_AREA)
             cv2.imwrite(processed_path, resized)
@@ -189,11 +247,12 @@ def build_external_captures(
         # like the synthetic pipeline's own missing-file edge case, with
         # no special-casing needed here.
 
+        lat, lon = _extract_gps(src_path)
         captures.append({
             "image_id": image_id,
             "timestamp": current_time.isoformat(),
-            "latitude": np.nan,
-            "longitude": np.nan,
+            "latitude": lat,
+            "longitude": lon,
             "robot_id": "EXTERNAL-UNKNOWN",
             "mission_id": "EXTERNAL-SAMPLE",
             "image_path": processed_path,

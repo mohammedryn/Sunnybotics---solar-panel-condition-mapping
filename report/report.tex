@@ -8,7 +8,7 @@
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage{capt-of}
-\usepackage[hidelinks]{hyperref}
+\usepackage[colorlinks=true, urlcolor=blue, linkcolor=black, citecolor=black]{hyperref}
 
 \usepackage{titlesec}
 \usepackage{float}
@@ -21,20 +21,20 @@
 \titlespacing*{\section}{0pt}{4pt}{2pt}
 \titlespacing*{\subsection}{0pt}{3pt}{1pt}
 
-\addtolength{\topmargin}{-0.25in}
-\addtolength{\textheight}{0.5in}
+\addtolength{\topmargin}{-0.35in}
+\addtolength{\textheight}{0.7in}
 
 \begin{document}
 \footnotesize
 
 \title{Solar Panel Image Capture and Condition Mapping}
-\author{\IEEEauthorblockN{Mohammed Rayan (Ryan)}
-\IEEEauthorblockA{Technical report submitted for the Sunnybotics internship challenge \\ July 2026 \\ Repository: \url{github.com/mohammedryn/Sunnybotics---solar-panel-condition-mapping}}}
+\author{\IEEEauthorblockN{Mohammed Rayan}
+\IEEEauthorblockA{Technical report submitted for the Sunnybotics internship challenge \\ July 2026 \\ Repository: \url{https://github.com/mohammedryn/Sunnybotics---solar-panel-condition-mapping}}}
 
 \maketitle
 
 \begin{abstract}
-This report describes a prototype that ingests solar panel images, links each one to a location and panel identity despite GPS error, classifies visible condition, and produces a prioritized, exportable result. The pipeline runs in two modes: a fully simulated mission with GPS, odometry, and route telemetry, and a run against Sunnybotics' own sample photographs, which carry no location metadata at all. On the simulated data, the panel-association logic never misidentifies a panel, even in the half of cases where it flags its own answer as ambiguous, and the condition classifier reaches 86.3\% accuracy across five categories. On the real photographs the same zero-shot classifier fails outright: all 119 images come back as uncertain, because its thresholds were calibrated on clean synthetic renders and do not survive ordinary JPEG noise. A supervised classifier trained on the same underlying features recovers most of that gap, reaching 86.6\% cross-validated accuracy (Wilson 95\% CI 79.3--91.6\%). Both results are reported here, including the one that failed, because a system that only reports its successes is not one anyone should trust with thousands of panels.
+This report describes a prototype that ingests solar panel images, links each one to a location and panel identity despite GPS error, classifies visible condition, and produces a prioritized, exportable result. The pipeline runs in two modes: a fully simulated mission with GPS, odometry, and route telemetry, and a run against Sunnybotics' own sample photographs, which carry no location metadata at all. On the simulated data, the panel-association logic never misidentifies a panel, even in the half of cases where it flags its own answer as ambiguous, and a zero-shot condition classifier reaches 86.3\% accuracy across five categories. Running that same classifier against real photographs is a deliberate transfer test, and it surfaces exactly the gap you would expect from thresholds calibrated only on clean synthetic renders: all 119 real images come back as uncertain rather than a wrong answer. That gap motivated a second, supervised classifier on the same features, reaching 86.6\% cross-validated accuracy (Wilson 95\% CI 79.3--91.6\%) telling clean from damaged on real data. Both stages, the diagnostic and the fix, are reported here, because a system that only shows its successes is not one anyone should trust with thousands of panels.
 \end{abstract}
 
 \section{Introduction}
@@ -63,7 +63,7 @@ Every image is reduced to ten numbers before any decision is made: area ratios f
 
 On synthetic data, where ground truth exists, this reaches 86.3\% overall: clean and glare both land at 100\%, damage at 88.9\%, and dirt and shadow trail at 75.7\% and 75.0\%, the two conditions closest to each other visually.
 
-I also ran this unmodified classifier against the 119 real photographs. It does not work. Every image comes back uncertain, because real JPEGs carry texture and lighting noise on every frame, which clears every threshold simultaneously and leaves nothing for the tie-break to decide between.
+The natural next question is whether this same zero-shot classifier transfers to real photographs, so I ran it, unmodified, against the 119 real images Sunnybotics sent. It does not, in a specific way: every image comes back uncertain rather than a wrong label, since real JPEGs carry texture and lighting noise on every frame, clearing every threshold at once and leaving nothing for the tie-break to decide between. That result is the reason the supervised classifier below exists.
 
 \begin{figure}[!t]
 \centering
@@ -119,7 +119,7 @@ The Kalman filter currently detects GPS bias but does not correct it; adding a b
 
 \section{Answers to the Required Questions}
 
-\textit{How do you guarantee that each photo is linked to the correct panel, given 1--3\,m of GPS error?} I do not guarantee it in the strict sense; I try to make the system honest about when it cannot be sure. Section II covers the mechanism: Kalman-fused GPS and odometry, a softmax posterior over known panel positions, and four checks that downgrade to ambiguous rather than commit. What matters most is the result: on the synthetic set, the top-1 guess was correct 100\% of the time, in both the matched and ambiguous groups.
+\textit{How do you guarantee that each photo is linked to the correct panel, given 1--3\,m of GPS error?} I do not guarantee it in the strict sense; I try to make the system honest about when it cannot be sure. Section II covers the mechanism: Kalman-fused GPS and odometry, a softmax posterior over known panel positions, and four checks that downgrade to ambiguous rather than commit. On the synthetic set, the top-1 guess was correct 100\% of the time, in both the matched and ambiguous groups.
 
 \textit{How do you detect that an image is unusable?} Three cheap checks run before condition analysis: a forced full decode with PIL's \texttt{.load()} rather than \texttt{.verify()}, which I found empirically does not catch a truncated file; a pixel standard-deviation check for blackout or overexposure; and a Laplacian-variance check for blur. There is no dedicated ``panel not visible'' detector yet, a real gap noted in Section VII.
 
@@ -138,7 +138,7 @@ Beyond the required features, this includes a simulated GPS and odometry route a
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.62\linewidth]{assets/farm_grid_m01.png}
+\includegraphics[width=0.6\linewidth]{assets/farm_grid_m01.png}
 \caption{\footnotesize Farm-grid dashboard, mission 1: panel ID, condition, and recommended action per cell, giving full traceability from image to location to diagnosis. It also ships as a filterable interactive HTML page.}
 \label{fig:farm_grid}
 \end{figure}

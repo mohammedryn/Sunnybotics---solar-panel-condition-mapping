@@ -54,10 +54,20 @@ import cv2
 import numpy as np
 import pandas as pd
 import pillow_heif
-from PIL import ExifTags
+from PIL import ExifTags, ImageOps
 from PIL import Image as PILImage
 
 from . import config
+
+# Registers HEIC/HEIF with PIL's own opener so PILImage.open() handles both
+# formats identically - same .getexif()/.get_ifd(GPSInfo) API, and critically
+# the same ImageOps.exif_transpose() orientation handling. Without this,
+# HEIC files would need a separate hand-rolled EXIF-parsing path with no
+# orientation correction, which would silently analyze any rotated phone
+# photo sideways - a real bug, not a hypothetical one, since 16 of the 119
+# real JPGs here carry a non-1 orientation tag (cv2.imread already corrects
+# those automatically; this makes HEIC match that same guarantee).
+pillow_heif.register_heif_opener()
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp")
 # cv2.imread can't decode these without an extra codec this project doesn't
@@ -135,17 +145,21 @@ def discover_images(root_dir: str = None) -> list:
 
 
 def _read_image_any_format(path: str):
-    """cv2.imread for anything it natively handles; pillow-heif -> RGB ->
-    BGR for .heic/.heif, so both paths hand back the same BGR ndarray
+    """cv2.imread for anything it natively handles - it already
+    auto-corrects EXIF orientation for jpg/png, confirmed directly against
+    this real dataset (an orientation=6 file's loaded dimensions matched
+    PIL's exif_transpose'd size, not its raw stored size). For .heic/.heif,
+    PIL (with pillow-heif registered as its HEIF opener above) handles
+    decode + the identical orientation correction via exif_transpose,
+    then converts RGB -> BGR so both paths hand back the same ndarray
     shape everything downstream (resize, feature extraction) expects.
     Returns None on any decode failure, exactly like cv2.imread does -
     the caller's existing "processed_path unwritten -> ingest.py reports
     missing_file" path handles both identically, no new failure mode."""
     if path.lower().endswith(HEIC_EXTENSIONS):
         try:
-            heif_file = pillow_heif.open_heif(path, convert_hdr_to_8bit=True)
-            rgb = np.array(PILImage.frombytes(heif_file.mode, heif_file.size, heif_file.data, "raw"))
-            return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+            img = ImageOps.exif_transpose(PILImage.open(path).convert("RGB"))
+            return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
         except Exception:
             return None
     return cv2.imread(path)
@@ -167,20 +181,12 @@ def _extract_gps(path: str):
     photo genuinely has no GPS block (about 21% of the jpg/jpeg set) or
     when it's present but degenerate (direction ref with no lat/lon
     magnitude, seen in a handful of real files here), never guessed at.
-    Two decode paths since HEIC's EXIF isn't exposed through the same
-    PIL API as jpg/png - pillow-heif hands back a raw EXIF blob (a
-    standard 'Exif\\x00\\x00' header followed by TIFF data) instead."""
+    One decode path for every format: pillow-heif registers itself as
+    PIL's HEIF opener (see module import), so PILImage.open().getexif()
+    works identically for jpg/png/heic/heif - no format-specific branching
+    needed here at all."""
     try:
-        if path.lower().endswith(HEIC_EXTENSIONS):
-            heif_file = pillow_heif.open_heif(path)
-            exif_bytes = heif_file.info.get("exif")
-            if not exif_bytes:
-                return np.nan, np.nan
-            exif = PILImage.Exif()
-            exif.load(exif_bytes[6:])  # strip the 'Exif\x00\x00' segment header
-        else:
-            exif = PILImage.open(path).getexif()
-        gps = exif.get_ifd(ExifTags.IFD.GPSInfo)
+        gps = PILImage.open(path).getexif().get_ifd(ExifTags.IFD.GPSInfo)
         if not gps:
             return np.nan, np.nan
         lat = _dms_to_decimal(gps.get(2), gps.get(1))

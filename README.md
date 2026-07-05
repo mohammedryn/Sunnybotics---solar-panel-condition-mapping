@@ -5,7 +5,7 @@
 ![Report](https://img.shields.io/badge/technical%20report-IEEE%20format%2C%202%20pages-informational)
 ![Modes](https://img.shields.io/badge/pipeline%20modes-synthetic%20%2B%20external-orange)
 
-A pipeline for a solar-farm cleaning/inspection robot. Give it a photo and it tells you three things: which panel it is, what condition that panel is in, and what evidence backs the call, end to end, from raw capture to a traceable, exportable result.
+A perception-to-decision pipeline for solar-farm operations and maintenance. Give it a photo and it tells you three things: which panel it is, what condition that panel is in, and what to actually do about it — clean, inspect, human review, or recapture — with the evidence behind every call, end to end from raw capture to a traceable, exportable result.
 
 This is my submission for Sunnybotics' internship technical challenge. I built it as two separate pipelines: one for a fully simulated mission (GPS, odometry, route telemetry, injected sensor faults), and a second one built specifically for Sunnybotics' own real sample photographs, since real images call for a genuinely different approach than a synthetic renderer does. Both are documented here in full, side by side, with an honest account of how they compare.
 

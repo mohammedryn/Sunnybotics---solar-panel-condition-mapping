@@ -229,8 +229,8 @@ def _score_external_row(row: pd.Series) -> dict:
         return {
             "cleaning_priority_score": config.UNUSABLE_RECAPTURE_PRIORITY_SCORE,
             "priority_band": _priority_band(config.UNUSABLE_RECAPTURE_PRIORITY_SCORE),
-            "priority_reason": f"Image {row['visual_analysis_status']} - cannot assess condition; "
-                                f"recapture required before any other action.",
+            "priority_reason": f"Image {row['visual_analysis_status']} ({row['unusable_reason']}) - "
+                                f"cannot assess condition; recapture required before any other action.",
             "recommended_action": "recapture",
         }
 

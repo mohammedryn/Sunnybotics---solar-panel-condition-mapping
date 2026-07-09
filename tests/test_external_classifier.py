@@ -338,5 +338,43 @@ class TestNoLabelLeakageIntoNormalPipeline(unittest.TestCase):
             self.assertNotIn("ground_truth", inspect.getsource(fn))
 
 
+class TestPromoteToPrimaryCondition(unittest.TestCase):
+    def test_promotes_supervised_call_and_preserves_zero_shot(self):
+        conditioned_df = pd.DataFrame({
+            "image_id": ["a", "b", "c"],
+            "condition": ["uncertain", "uncertain", "uncertain"],
+            "condition_confidence": [np.nan, np.nan, np.nan],
+            "visual_analysis_status": ["ok", "ok", "unusable"],
+        })
+        final_predictions_df = pd.DataFrame({
+            "image_id": ["a", "b"],  # "c" has no prediction - unusable, filtered upstream
+            "external_predicted_label": ["clean", "damaged"],
+            "external_confidence": [0.91, 0.77],
+        })
+
+        result = ec.promote_to_primary_condition(conditioned_df, final_predictions_df)
+
+        row_a = result[result["image_id"] == "a"].iloc[0]
+        self.assertEqual(row_a["condition"], "clean")
+        self.assertEqual(row_a["condition_confidence"], 0.91)
+        self.assertEqual(row_a["zero_shot_condition"], "uncertain")
+        self.assertTrue(pd.isna(row_a["zero_shot_confidence"]))
+
+        row_c = result[result["image_id"] == "c"].iloc[0]
+        self.assertEqual(row_c["condition"], "uncertain")  # unchanged - no supervised prediction available
+        self.assertEqual(row_c["zero_shot_condition"], "uncertain")
+
+    def test_does_not_mutate_the_input_dataframe(self):
+        conditioned_df = pd.DataFrame({
+            "image_id": ["a"], "condition": ["uncertain"],
+            "condition_confidence": [np.nan], "visual_analysis_status": ["ok"],
+        })
+        final_predictions_df = pd.DataFrame({
+            "image_id": ["a"], "external_predicted_label": ["clean"], "external_confidence": [0.9],
+        })
+        ec.promote_to_primary_condition(conditioned_df, final_predictions_df)
+        self.assertEqual(conditioned_df.iloc[0]["condition"], "uncertain")
+
+
 if __name__ == "__main__":
     unittest.main()

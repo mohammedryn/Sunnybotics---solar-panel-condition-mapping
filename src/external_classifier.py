@@ -488,3 +488,29 @@ def merge_into_results(export_df: pd.DataFrame, cv_eval_df: pd.DataFrame, final_
     )
     merged = merged.merge(cv_cols, on="image_id", how="left")
     return merged
+
+
+def promote_to_primary_condition(conditioned_df: pd.DataFrame, final_predictions_df: pd.DataFrame) -> pd.DataFrame:
+    """Makes the supervised classifier's call the primary condition/
+    confidence for external mode, instead of an auxiliary column - per
+    reviewer feedback that the better result "appeared only as an
+    auxiliary output rather than being reflected in the main result
+    fields." The original zero-shot result is never deleted, only
+    demoted to zero_shot_condition/zero_shot_confidence, so the honest
+    diagnostic finding (Fig. 2's "everything comes back uncertain"
+    result) stays fully visible - just no longer the first thing a
+    reader sees.
+
+    Rows with no entry in final_predictions_df (visual_analysis_status
+    != "ok" - no image to extract features from, so no supervised call
+    is possible) keep their original zero-shot condition unchanged;
+    there is nothing better to put there."""
+    out = conditioned_df.copy()
+    out["zero_shot_condition"] = out["condition"]
+    out["zero_shot_confidence"] = out["condition_confidence"]
+
+    preds = final_predictions_df.set_index("image_id")
+    has_prediction = out["image_id"].isin(preds.index)
+    out.loc[has_prediction, "condition"] = out.loc[has_prediction, "image_id"].map(preds["external_predicted_label"])
+    out.loc[has_prediction, "condition_confidence"] = out.loc[has_prediction, "image_id"].map(preds["external_confidence"])
+    return out

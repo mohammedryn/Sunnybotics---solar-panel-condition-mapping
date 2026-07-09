@@ -98,13 +98,13 @@ def _acquire_data(mode: str):
 
 def _run_shared_stages(mode: str):
     """Ingestion through export/visualization - identical code path for
-    both modes. ingest.py, associate_panels.py, condition_analysis.py,
-    priority_score.py, annotate.py, and export.py are all schema-tolerant
-    of external mode's missing route/GPS structure (each documents this
-    in its own module docstring) - nothing here branches on mode except
-    which self-evaluation/visualization to run at the end, since
-    synthetic's ground truth and external's folder-label ground truth
-    have genuinely different shapes."""
+    both modes, with one deliberate exception: external mode promotes the
+    supervised classifier's call to the primary condition/confidence
+    BEFORE priority scoring and annotation run, so every downstream
+    artifact (CSV, JSON, GeoJSON, the annotated image's burned-in text)
+    agrees with whichever result is primary. See promote_to_primary_
+    condition()'s docstring in external_classifier.py for why this can't
+    be a post-hoc column swap."""
     print("\n" + "=" * 60)
     print("Ingesting captures (RF-01)")
     print("=" * 60)
@@ -129,16 +129,40 @@ def _run_shared_stages(mode: str):
     print("Analyzing condition (RF-03)")
     print("=" * 60)
     conditioned = condition_analysis.analyze()
-    condition_analysis.save_results(conditioned)
     print(f"Analyzed {len(conditioned)} rows.")
     if mode == "synthetic":
         for k, v in condition_analysis.self_evaluate(conditioned).items():
             print(f"  {k}: {v}")
 
+    benchmark = None
+    if mode == "external":
+        print("\n" + "=" * 60)
+        print("Supervised clean/damaged benchmark (cross-validated) (RF-03 supplement)")
+        print("=" * 60)
+        ground_truth_df = pd.read_csv(config.EXTERNAL_GROUND_TRUTH_PATH)
+        benchmark = external_classifier.run_supervised_benchmark(conditioned, ground_truth_df)
+        if benchmark is None:
+            print("  Not enough labeled images per class to run a meaningful benchmark - "
+                  "condition stays as the zero-shot classifier's own call.")
+        else:
+            conditioned = external_classifier.promote_to_primary_condition(
+                conditioned, benchmark["final_predictions_df"]
+            )
+            summary = benchmark["summary"]
+            ci = summary["accuracy_95ci_wilson"]
+            print(f"  classifier backend: {summary['classifier_backend']} ({summary['cv_folds']}-fold CV)")
+            print(f"  cross-validated accuracy (main external metric): {summary['accuracy']} "
+                  f"(95% CI [Wilson]: {ci[0]:.3f}-{ci[1]:.3f})")
+            print(f"  naive baselines: {summary['naive_baselines']}")
+            print(f"  top features: {[f['feature'] for f in summary['top_features']]}")
+            print(f"  Promoted to primary condition/confidence - this is now what results.csv/json/geojson lead with.")
+
+    condition_analysis.save_results(conditioned)
+
     print("\n" + "=" * 60)
     print("Scoring priority (RF-04)")
     print("=" * 60)
-    prioritized = priority_score.score_priorities()
+    prioritized = priority_score.score_priorities(mode=mode)
     priority_score.save_priorities(prioritized)
     print(f"Scored {len(prioritized)} rows.")
 
@@ -164,33 +188,11 @@ def _run_shared_stages(mode: str):
               f"{zero_shot_summary['clean_vs_damaged_accuracy_on_binary_predictions']}")
         print(f"  n_evaluable: {zero_shot_summary['n_evaluable']} / n_total: {zero_shot_summary['n_total']}")
 
-        print("\n" + "=" * 60)
-        print("Supervised clean/damaged benchmark (cross-validated) (RF-03 supplement)")
-        print("=" * 60)
-        ground_truth_df = pd.read_csv(config.EXTERNAL_GROUND_TRUTH_PATH)
-        benchmark = external_classifier.run_supervised_benchmark(conditioned, ground_truth_df)
-        if benchmark is None:
-            print("  Not enough labeled images per class to run a meaningful benchmark - skipped.")
-        else:
+        if benchmark is not None:
             external_classifier.save_binary_eval(benchmark["cv_eval_df"])
             external_classifier.save_binary_eval_summary(benchmark["summary"])
             external_classifier.save_feature_importance(benchmark["importance_df"])
             external_classifier.save_confidence_strata(benchmark["strata_df"])
-
-            export_df = external_classifier.merge_into_results(
-                export_df, benchmark["cv_eval_df"], benchmark["final_predictions_df"]
-            )
-            export.save_json(export_df)
-            export.save_csv(export_df)
-            export.save_geojson(export_df)
-
-            summary = benchmark["summary"]
-            print(f"  classifier backend: {summary['classifier_backend']} ({summary['cv_folds']}-fold CV)")
-            ci = summary["accuracy_95ci_wilson"]
-            print(f"  cross-validated accuracy (main external metric): {summary['accuracy']} "
-                  f"(95% CI [Wilson]: {ci[0]:.3f}-{ci[1]:.3f})")
-            print(f"  naive baselines: {summary['naive_baselines']}")
-            print(f"  top features: {[f['feature'] for f in summary['top_features']]}")
             print(f"  -> {config.OUTPUTS_DIR}/external_binary_eval.csv, "
                   f"external_binary_eval_summary.json, external_feature_importance.csv, "
                   f"external_confidence_strata.csv")

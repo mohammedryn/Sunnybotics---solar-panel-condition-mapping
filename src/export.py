@@ -89,6 +89,8 @@ def build_export_rows(joined_df: pd.DataFrame, annotated_paths: dict) -> pd.Data
         "panel_id": joined_df["predicted_panel_id"],
         "condition": joined_df["condition"],
         "confidence": joined_df["condition_confidence"],
+        "zero_shot_condition": joined_df.get("zero_shot_condition"),
+        "zero_shot_confidence": joined_df.get("zero_shot_confidence"),
         "cleaning_priority_score": joined_df["cleaning_priority_score"],
         "annotated_image_path": joined_df["image_id"].map(annotated_paths),
         "detected_issues": joined_df["detected_issues"],

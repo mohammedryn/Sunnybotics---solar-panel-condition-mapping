@@ -213,9 +213,63 @@ def _score_row(row: pd.Series, association_df: pd.DataFrame) -> dict:
     }
 
 
+def _score_external_row(row: pd.Series) -> dict:
+    """External-mode priority scoring - deliberately NOT a call into
+    _score_row(). That function's branch order is keyed on
+    detected_issues, which comes from the same classical CV thresholds
+    already shown (in the report's own Section III) not to transfer to
+    real photos - confirmed empirically this session that "damage"
+    appears in detected_issues for all 129 real rows regardless of true
+    label, which is exactly why priority scoring was flat before this
+    fix. This function is keyed only on the promoted condition (the
+    supervised classifier's call), reusing the same config constants and
+    formula shapes as _score_row for philosophical consistency, applied
+    to the classifier that's actually reliable on real data instead."""
+    if row["visual_analysis_status"] != "ok":
+        return {
+            "cleaning_priority_score": config.UNUSABLE_RECAPTURE_PRIORITY_SCORE,
+            "priority_band": _priority_band(config.UNUSABLE_RECAPTURE_PRIORITY_SCORE),
+            "priority_reason": f"Image {row['visual_analysis_status']} - cannot assess condition; "
+                                f"recapture required before any other action.",
+            "recommended_action": "recapture",
+        }
+
+    confidence = row["condition_confidence"]
+    if row["condition"] == "damaged":
+        score = min(100.0, config.DAMAGE_PRIORITY_FLOOR + config.DAMAGE_PRIORITY_CONFIDENCE_RANGE * confidence)
+        return {
+            "cleaning_priority_score": score,
+            "priority_band": _priority_band(score),
+            "priority_reason": f"Supervised classifier called this panel damaged (confidence={confidence:.2f}) "
+                                f"- inspection prioritized given asymmetric risk of missed structural damage.",
+            "recommended_action": "inspect",
+        }
+
+    if row["condition"] == "clean":
+        score = config.CLEAN_PRIORITY_SCORE
+        return {
+            "cleaning_priority_score": score,
+            "priority_band": _priority_band(score),
+            "priority_reason": f"Supervised classifier called this panel clean (confidence={confidence:.2f}).",
+            "recommended_action": "none",
+        }
+
+    # Defensive fallback - should not be reached given promote_to_primary_condition's
+    # contract (every "ok" row gets a clean/damaged call), but never silently
+    # guess at a priority for a condition value this function doesn't recognize.
+    score = config.UNCERTAIN_PRIORITY_SCORE
+    return {
+        "cleaning_priority_score": score,
+        "priority_band": _priority_band(score),
+        "priority_reason": f"Unrecognized condition '{row['condition']}' for external mode - human review recommended.",
+        "recommended_action": "human_review",
+    }
+
+
 def score_priorities(
     condition_results_path: str = None,
     association_results_path: str = None,
+    mode: str = "synthetic",
 ) -> pd.DataFrame:
     condition_results_path = condition_results_path or os.path.join(config.DATA_DIR, "condition_results.csv")
     association_results_path = association_results_path or os.path.join(config.DATA_DIR, "association_results.csv")
@@ -225,7 +279,7 @@ def score_priorities(
 
     rows = []
     for _, row in condition_df.iterrows():
-        scored = _score_row(row, association_df)
+        scored = _score_external_row(row) if mode == "external" else _score_row(row, association_df)
         scored["image_id"] = row["image_id"]
         rows.append(scored)
 

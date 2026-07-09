@@ -303,10 +303,7 @@ def external_eval_summary(export_df: pd.DataFrame, ground_truth_path: str = None
             return "damaged"
         return "other"
 
-    # Read zero_shot_condition if it exists (after Task 1's primary-condition swap),
-    # otherwise fall back to condition (before the swap, for backward compatibility).
-    condition_column = "zero_shot_condition" if "zero_shot_condition" in merged.columns else "condition"
-    merged["predicted_label"] = merged[condition_column].apply(_predicted_label)
+    merged["predicted_label"] = merged["zero_shot_condition"].apply(_predicted_label)
     resolved = merged[merged["visual_analysis_status"] == "ok"]
     binary = resolved[resolved["predicted_label"].isin(["clean", "damaged"])]
 
@@ -366,12 +363,9 @@ def build_external_summary_chart(export_df: pd.DataFrame, ground_truth_path: str
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
     colors = {"clean": "#4caf50", "damaged": "#e53935"}
-    # Read zero_shot_condition if it exists (after Task 1's primary-condition swap),
-    # otherwise fall back to condition (before the swap, for backward compatibility).
-    condition_column = "zero_shot_condition" if "zero_shot_condition" in resolved.columns else "condition"
     for ax, true_label in zip(axes, ["clean", "damaged"]):
         sub = resolved[resolved["true_label"] == true_label]
-        counts = sub[condition_column].value_counts()
+        counts = sub["zero_shot_condition"].value_counts()
         ax.bar(counts.index, counts.values, color=colors[true_label])
         ax.set_title(f"True label: {true_label} (n={len(sub)})")
         ax.set_ylabel("predicted condition count")

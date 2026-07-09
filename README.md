@@ -1,7 +1,7 @@
 # Sunnybotics — Solar Panel Image Capture & Condition Mapping
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-40%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-47%20passing-brightgreen)
 ![Report](https://img.shields.io/badge/technical%20report-IEEE%20format%2C%202%20pages-informational)
 ![Modes](https://img.shields.io/badge/pipeline%20modes-synthetic%20%2B%20external-orange)
 
@@ -46,7 +46,7 @@ git clone https://github.com/roboticsSunnyApp/sunnybotics-solar-panel-challenge 
 If it's missing, the pipeline fails loudly with that exact command instead of skipping silently.
 
 ```bash
-# 40 tests, 3 files
+# 47 tests, 4 files
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/ -v
 ```
 
@@ -125,7 +125,7 @@ On the synthetic set, where the true answer is known: 49 of 100 captures matched
 | Spatial association, top-1 accuracy (ambiguous group) | 100% |
 | Condition accuracy, overall | 86.3% (clean 100 / glare 100 / damage 88.9 / dirt 75.7 / shadow 75.0%) |
 | Deliberately broken images injected | 8, across 2 mechanisms (see [Known Limitations](#known-limitations)) |
-| Tests passing | 40 / 40 |
+| Tests passing | 47 / 47 |
 
 ### Real photographs, external mode (129 images, 41 clean / 88 damaged)
 
@@ -176,7 +176,7 @@ Every step in that chain actually ran against the real dataset. None of it is pr
 - **Kalman filter, not nearest-neighbor, for panel association.** GPS alone can't reliably separate adjacent panels at this pitch, and a GPS bias shifts a whole row the same way. A per-route-pass filter fuses odometry (predict) with GPS (correct). Reported confidence is a separately bias-floored value, not the filter's raw uncertainty. Using the raw value let repeated GPS updates look confident even under a bias the filter never saw, which showed up for real in one simulated mission and got flagged for review instead of silently trusted.
 - **Classical CV, not a trained model, for the condition classifier.** A learned model risks memorizing this project's own image generator instead of anything about solar panels. Four heuristics, each tied to a real physical signature, each measured against that image's own baseline. Damage detection went through three real fixes (a border-exclusion filter that was too aggressive, a corrupted calibration image, an RNG coupling bug), taking it from 55.6% to 88.9% by fixing the detector, not loosening a threshold.
 - **Ground truth never touches inference**, in either mode. The synthetic and real labels each live in their own file, joined back in only at evaluation time. This is tested structurally, since the label column literally isn't in the inference dataframe, and behaviorally: the external classifier's cross-validation code was mutation-tested by reintroducing two different leaks and confirming the tests actually caught both before trusting the guarantee.
-- **Priority scores map to an action, not a dressed-up confidence.** Damage floors high regardless of confidence, since missing a crack is expensive. Dirt scales by measured area, not classifier confidence. Genuinely uncertain results always route to human review, never auto-cleaning.
+- **Priority scores map to an action, not a dressed-up confidence.** Damage floors high regardless of confidence, since missing a crack is expensive. Dirt scales by measured area, not classifier confidence. Genuinely uncertain results always route to human review, never auto-cleaning. External mode scores from its own dedicated function, not this one: its condition is binary (clean/damaged) and its `detected_issues` list comes from the same classical signals proven unreliable on real photos, so reusing the five-category branch logic here would silently reintroduce that unreliability into the priority score. Same underlying philosophy (damage floors high, clean scores low), applied to the classifier that's actually right on real data.
 - **Mode-scoped, not mode-specific.** `ingest → associate → condition → priority → annotate → export` is identical code for a fully-instrumented simulated mission and a flat folder of real phone photos with no metadata at all. Only the acquisition adapter and the final evaluation step differ, as shown in the diagram above.
 
 ## Repo Layout
@@ -190,11 +190,15 @@ src/
   feature_extraction.py         RF-03: raw CV measurements
   condition_analysis.py         RF-03: rule-based classifier
   priority_score.py             RF-04: condition -> operational decision
+                                (dedicated scoring path for external mode,
+                                since its condition/detected_issues shape differs)
   annotate.py, export.py, visualize.py   RF-05/07
   external_dataset.py           adapts real photos into the same schema
-  external_classifier.py        supervised clean/damaged benchmark (external only)
+  external_classifier.py        supervised clean/damaged classifier, cross-validated
+                                for the accuracy claim, promoted to primary
+                                condition/confidence in external-mode results
 scripts/run_pipeline.py         --synthetic / --external
-tests/                          40 tests across 3 files
+tests/                          47 tests across 4 files
 report/                         2-page IEEE-format technical report (.tex + .pdf + figures)
 data/{synthetic,external}/      generated intermediates + cloned real dataset
 outputs/{synthetic,external}/   annotated images, evidence, results, benchmarks
@@ -215,12 +219,13 @@ Mapped directly to the brief's own deliverable IDs:
 
 ## Testing
 
-40 tests across 3 files, all passing:
+47 tests across 4 files, all passing:
 
 ```bash
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_pipeline.py -v            # 6 tests
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_external_dataset.py -v    # 14 tests
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_external_classifier.py -v # 20 tests
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_pipeline.py -v               # 6 tests
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_external_dataset.py -v       # 15 tests
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_external_classifier.py -v    # 22 tests
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest tests/test_priority_score_external.py -v # 4 tests
 ```
 
 The tests that matter most aren't just written, they're mutation-tested. The cross-validation leakage-proof tests were checked by deliberately reintroducing two different real leaks (held-out labels passed into scoring, and fitting on the full dataset instead of the training fold) one at a time, confirming both were actually caught, then reverting. That's the difference between a test that looks right and one that's actually been watched to fail.

@@ -72,7 +72,7 @@ flowchart TD
     end
 
     F --> EV1["self_evaluate()\nscored against known ground truth"]
-    F --> EV2["zero-shot eval\n+ external_classifier.py\nsupervised clean/damaged benchmark"]
+    F --> EV2["zero-shot eval\n+ external_classifier.py\nsupervised clean/damaged, promoted to primary condition"]
 
     EV1 --> O1[("data/synthetic/ + outputs/synthetic/")]
     EV2 --> O2[("data/external/ + outputs/external/\nreal photos gitignored, numeric\nresults published — see Limitations")]
@@ -83,7 +83,7 @@ flowchart TD
     class A2,EV2 diff
 ```
 
-Two modules exist only for the real-photo path: `external_dataset.py` adapts real files into the same schema everything downstream already expects, and `external_classifier.py` is the supervised benchmark described below. Everything else in the diagram is a single shared implementation.
+Two modules exist only for the real-photo path: `external_dataset.py` adapts real files into the same schema everything downstream already expects, and `external_classifier.py` is the supervised classifier described below, whose call is promoted to the primary `condition`/`confidence` for external mode. Everything else in the diagram is a single shared implementation.
 
 ### Panel Association: the Decision Logic
 
@@ -143,6 +143,8 @@ What I built for that is a second model: logistic regression on the same 10 feat
 
 That clears the baseline even at the low end of the confidence interval, and confidence genuinely tracks correctness, which makes it usable for triage. Full numbers live in `outputs/external/external_binary_eval_summary.json`.
 
+In the exported `results.csv/json/geojson`, this supervised call is now the primary `condition`/`confidence` for external mode, with the original zero-shot rule classifier's call preserved alongside it as `zero_shot_condition`/`zero_shot_confidence` — the diagnostic result above, disclosed but no longer the headline. That also means external mode's `condition` is binary (`clean`/`damaged`), not the five-category schema synthetic mode uses: a deliberate difference, since binary is the only distinction actually validated against real folder labels. Priority scoring for external rows is driven by this promoted condition too, so it no longer maxes out at every row regardless of what the photo shows.
+
 One finding worth calling out on its own: `damage_line_density`, the feature the rule-based damage detector is actually built around, pushes toward **clean** in the supervised model, not damaged. The classical line-density signal doesn't mean the same thing outside the synthetic renderer. The real-photo model leans on dirt, shadow, and glare area instead, and I would not have found this without looking at the model's own coefficients.
 
 ### Building the Real-Photo Classifier
@@ -164,7 +166,7 @@ sequenceDiagram
 
     Photo->>Sup: same 10 features, logistic regression, 5-fold CV
     Sup-->>Photo: 87.6% accuracy, Wilson CI [80.8, 92.2]
-    Note over Sup: The real external-mode metric.
+    Note over Sup: Promoted to primary condition/confidence,<br/>not just computed as a benchmark.
 ```
 
 Every step in that chain actually ran against the real dataset. None of it is projected or estimated.

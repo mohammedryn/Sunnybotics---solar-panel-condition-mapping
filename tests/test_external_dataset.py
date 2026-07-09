@@ -134,6 +134,15 @@ class TestExternalDatasetAdapter(unittest.TestCase):
         shutil.rmtree(config.OUTPUTS_DIR, ignore_errors=True)
         config.set_mode("synthetic")
 
+    def _write_ground_truth(self, records):
+        """Helper to write a temporary ground truth CSV with (image_id, true_label) tuples.
+        Returns the path to the written file."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+            f.write("image_id,true_label\n")
+            for image_id, true_label in records:
+                f.write(f"{image_id},{true_label}\n")
+            return f.name
+
     def test_missing_dataset_raises_helpful_error_not_silent_failure(self):
         with tempfile.TemporaryDirectory() as empty_dir:
             with self.assertRaises(external_dataset.ExternalDatasetNotFoundError) as ctx:
@@ -185,6 +194,31 @@ class TestExternalDatasetAdapter(unittest.TestCase):
         self.assertEqual(summary["n_total"], 7)
         self.assertIn("confusion_matrix", summary)
         self.assertIn("note", summary)
+
+    def test_eval_summary_reads_zero_shot_condition_not_promoted_condition(self):
+        """After the primary-condition swap, `condition` holds the supervised
+        call. external_eval_summary must still measure the ZERO-SHOT
+        classifier's own accuracy (the honest "everything comes back
+        uncertain" finding), so it must read zero_shot_condition, not
+        condition - otherwise it would silently start reporting the
+        supervised classifier's own results mislabeled as "zero-shot"."""
+        export_df = pd.DataFrame({
+            "image_id": ["a", "b"],
+            "condition": ["damaged", "clean"],           # promoted/supervised values
+            "zero_shot_condition": ["uncertain", "uncertain"],  # true zero-shot values
+            "visual_analysis_status": ["ok", "ok"],
+        })
+        gt_path = self._write_ground_truth([("a", "damaged"), ("b", "clean")])
+        try:
+            summary = external_dataset.external_eval_summary(export_df, ground_truth_path=gt_path)
+            # Both rows are zero_shot_condition="uncertain" -> both land in "other",
+            # matching the real, disclosed zero-shot failure - not the (correct)
+            # supervised predictions in `condition`.
+            self.assertEqual(summary["n_predicted_other_category"], 2)
+            self.assertIsNone(summary["clean_vs_damaged_accuracy_on_binary_predictions"])
+        finally:
+            if os.path.exists(gt_path):
+                os.unlink(gt_path)
 
 
 if __name__ == "__main__":

@@ -281,11 +281,16 @@ def external_eval_summary(export_df: pd.DataFrame, ground_truth_path: str = None
     evaluation time - after every inference stage has already run. Not
     called anywhere in the inference path.
 
+    Specifically measures the zero-shot classifier's own accuracy by reading
+    `zero_shot_condition` (the original zero-shot classifier's result), not
+    the primary `condition` field which after the supervised-promotion step
+    holds the classifier's supervised (better-performing) call.
+
     clean/damaged is coarser than the 5-category classifier's own
     vocabulary (a real clean panel could still register as e.g. 'shadow'
     without the classifier being wrong - it's answering a more specific
-    question than the folder split asks), so this maps `condition` to a
-    binary clean/damaged/other call for comparison, and reports the full
+    question than the folder split asks), so this maps `zero_shot_condition`
+    to a binary clean/damaged/other call for comparison, and reports the full
     breakdown honestly rather than only a flattering top-line number."""
     ground_truth_path = ground_truth_path or config.EXTERNAL_GROUND_TRUTH_PATH
     gt = pd.read_csv(ground_truth_path)
@@ -298,7 +303,10 @@ def external_eval_summary(export_df: pd.DataFrame, ground_truth_path: str = None
             return "damaged"
         return "other"
 
-    merged["predicted_label"] = merged["condition"].apply(_predicted_label)
+    # Read zero_shot_condition if it exists (after Task 1's primary-condition swap),
+    # otherwise fall back to condition (before the swap, for backward compatibility).
+    condition_column = "zero_shot_condition" if "zero_shot_condition" in merged.columns else "condition"
+    merged["predicted_label"] = merged[condition_column].apply(_predicted_label)
     resolved = merged[merged["visual_analysis_status"] == "ok"]
     binary = resolved[resolved["predicted_label"].isin(["clean", "damaged"])]
 
@@ -336,9 +344,14 @@ def build_external_summary_chart(export_df: pd.DataFrame, ground_truth_path: str
     """Non-spatial summary visualization - the farm grid's spatial layout
     doesn't apply here (there is no real panel geometry for this
     dataset), so this is a simple grouped bar chart instead: for each
-    true label (clean/damaged), what did the classifier actually predict.
-    Directly shows the confusion pattern without pretending a spatial
-    structure exists."""
+    true label (clean/damaged), what did the zero-shot classifier actually
+    predict. Directly shows the confusion pattern without pretending a spatial
+    structure exists.
+
+    Specifically visualizes the zero-shot classifier's performance by reading
+    `zero_shot_condition` (the original zero-shot classifier's result), not
+    the primary `condition` field which after the supervised-promotion step
+    holds the classifier's supervised (better-performing) call."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -353,9 +366,12 @@ def build_external_summary_chart(export_df: pd.DataFrame, ground_truth_path: str
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
     colors = {"clean": "#4caf50", "damaged": "#e53935"}
+    # Read zero_shot_condition if it exists (after Task 1's primary-condition swap),
+    # otherwise fall back to condition (before the swap, for backward compatibility).
+    condition_column = "zero_shot_condition" if "zero_shot_condition" in resolved.columns else "condition"
     for ax, true_label in zip(axes, ["clean", "damaged"]):
         sub = resolved[resolved["true_label"] == true_label]
-        counts = sub["condition"].value_counts()
+        counts = sub[condition_column].value_counts()
         ax.bar(counts.index, counts.values, color=colors[true_label])
         ax.set_title(f"True label: {true_label} (n={len(sub)})")
         ax.set_ylabel("predicted condition count")
